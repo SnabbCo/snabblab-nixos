@@ -78,7 +78,8 @@ in rec {
       name = "basic1_snabb=${testing.versionToAttribute snabb.version or ""}_packets=100e6";
       inherit snabb times hardware keepShm sudo;
       checkPhase = ''
-        ${sudo} -E ${snabb}/bin/snabb snabbmark basic1 100e6 |& tee $out/log.txt
+        [ -z "$SNABB_CPUS" ] && (echo "SNABB_CPUS not set"; exit 1)
+        ${sudo} -E taskset -c $(cut -d '-' -f 1 <<<$SNABB_CPUS) ${snabb}/bin/snabb snabbmark basic1 100e6 |& tee $out/log.txt
       '';
       toCSV = drv: ''
         score=$(awk '/Mpps/ {print $(NF-1)}' < ${drv}/log.txt)
