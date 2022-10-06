@@ -41,7 +41,7 @@ p <- p + theme(legend.position="top")
 p <- p + geom_point()
 p <- p + geom_line()
 p <- p + expand_limits(y=0)
-p <- p + facet_grid(config ~ benchmark, scales = "free")
+p <- p + facet_wrap(config ~ pktsize ~ benchmark, scales = "free")
 p + ggtitle("Sequential test results")
 ```
 
@@ -52,7 +52,7 @@ p + ggtitle("Sequential test results")
 p <- ggplot(sliced, aes(x=id, y=score, color=snabb))
 p <- p + theme(legend.position="top")
 p <- p + geom_boxplot(alpha=0.50)
-p <- p + facet_grid(config ~ benchmark, scales = "free")
+p <- p + facet_wrap(config ~ pktsize ~ benchmark, scales = "free")
 p + ggtitle("Summary of test results")
 ```
 
@@ -64,7 +64,7 @@ p + ggtitle("Summary of test results")
 p <- ggplot(sliced, aes(score, fill = snabb, color = snabb))
 p <- p + theme(legend.position="top")
 p <- p + geom_density(alpha = 0.1)
-p <- p + facet_grid(config ~ benchmark, scales = "free")
+p <- p + facet_wrap(config ~ pktsize ~ benchmark, scales = "free")
 p + ggtitle("Shape (distribution) of test results")
 ```
 
