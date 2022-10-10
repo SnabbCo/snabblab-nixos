@@ -294,6 +294,35 @@ in rec {
 
     };
 
+  /* Execute `ipfix-probe` benchmark.
+
+     `ipfix-probe` depends on SNABB_CPUS0, SNABB_CPUS1,
+     SNABB_PCI_CONNECTX_0, SNABB_PCI_CONNECTX_1.
+       - duration specifies benchmark duration
+  */
+  mkMatrixBenchIpfixProbe = { snabb, times, duration ? "20", hardware ? "murren", keepShm, sudo, ... }:
+    mkSnabbBenchTest {
+      name = "ipfix-probe_duration=${duration}_snabb=${testing.versionToAttribute snabb.version or ""}";
+      inherit snabb times hardware keepShm sudo;
+      meta = { inherit duration; };
+      toCSV = drv: ''
+        score=$(awk '/Mpps/ {print $(NF-1)}' < ${drv}/log.txt)
+        ${writeCSV drv "ipfix-probe" "Mpps"}
+      '';
+      checkPhase = ''
+        cd src
+        [ -z "$SNABB_CPUS0" ] && (echo "SNABB_CPUS0 not set"; exit 1)
+        [ -z "$SNABB_CPUS1" ] && (echo "SNABB_CPUS1 not set"; exit 1)
+        [ -z "$SNABB_PCI_CONNECTX_0" ] && (echo "SNABB_PCI_CONNECTX_0 not set"; exit 1)
+        [ -z "$SNABB_PCI_CONNECTX_1" ] && (echo "SNABB_PCI_CONNECTX_1 not set"; exit 1)
+        ${sudo} -E ${snabb}/bin/snabb snsh program/ipfix/tests/bench.snabb \
+          --duration ${duration} --new-flows-freq 450 \
+          --cpu "$SNABB_CPUS0" --loadgen-cpu "$SNABB_CPUS1" \
+          "$SNABB_PCI_CONNECTX_0" "$SNABB_PCI_CONNECTX_1" |& tee $out/log.txt
+      '';
+
+    };
+
   /* Given a benchmark derivation, benchmark name and a unit,
      write a line of the CSV file using all provided benchmark information.
   */
@@ -407,5 +436,7 @@ in rec {
       mellanox-source-64 = params: mkMatrixBenchMellanoxSource (params // {pktsize = "64";});
 
       lwaftr-soft = mkMatrixBenchLwaftrSoft;
+
+      ipfix-probe = mkMatrixBenchIpfixProbe;
     };
 }
