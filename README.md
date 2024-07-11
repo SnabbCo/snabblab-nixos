@@ -120,10 +120,3 @@ To use test specifc using a specific Nixpkgs commit you can for example use:
 ```
 --arg nixpkgs "(builtins.fetchTarball https://github.com/NixOS/nixpkgs/archive/37e7e86ddd09d200bbdfd8ba8ec2fd2f0621b728.tar.gz)"
 ```
-
-Similarly we are able to run say the SnabbNFV benchmarks and test suite using
-different versions of QEMU (defined in `lib/software.nix`):
-
-```
---arg qemuVersions '["2.6.2"]'
-```
