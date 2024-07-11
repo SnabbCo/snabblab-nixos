@@ -21,7 +21,7 @@ rec {
    if snabbSrc == null
    then null
    else
-      (pkgs.callPackage snabbSrc {}).overrideDerivation (super:
+      ((import <nixpkgs> {}).callPackage snabbSrc {}).overrideDerivation (super:
         {
           name = super.name + version;
           inherit version;
