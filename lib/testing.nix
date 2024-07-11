@@ -15,8 +15,21 @@ rec {
       SNABB_CPUS = "6-23";
       SNABB_CPUS0 = "6-11";
       SNABB_CPUS1 = "12-17";
-      SNABB_PCI_CONNECTX_0 = "0000:81:00.0";
-      SNABB_PCI_CONNECTX_1 = "0000:81:00.1";
+      #SNABB_PCI0 = "0000:44:00.0";
+      #SNABB_PCI_INTEL0 = "0000:44:00.0";
+      #SNABB_PCI_INTEL1 = "0000:44:00.1";
+      SNABB_PCI_CONNECTX_0 = "0000:17:00.0";
+      SNABB_PCI_CONNECTX_1 = "0000:17:00.1";
+    };
+    nfg2_soft = {
+      SNABB_CPUS = "6-23";
+      SNABB_CPUS0 = "6-11";
+      SNABB_CPUS1 = "12-17";
+      #SNABB_PCI0 = "0000:44:00.0";
+      # SNABB_PCI_INTEL0 = "0000:44:00.0";
+      # SNABB_PCI_INTEL1 = "0000:44:00.1";
+      # SNABB_PCI_CONNECTX_0 = "0000:81:00.0";
+      # SNABB_PCI_CONNECTX_1 = "0000:81:00.1";
     };
     murren = {};
   };
