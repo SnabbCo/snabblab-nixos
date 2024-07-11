@@ -23,11 +23,6 @@ in rec {
   */
   mkSnabbBenchTest = { name, times, keepShm ? false, sudo, toCSV, ... }@attrs:
     let
-      # patch needed for Snabb v2016.05 and lower
-      testEnvPatch = pkgs.fetchurl {
-        url = "https://github.com/snabbco/snabb/commit/e78b8b2d567dc54cad5f2eb2bbb9aadc0e34b4c3.patch";
-        sha256 = "12k4217y6d30l6cn9gq53s1wz3m31gacj9ppsgdq2wk72v4s7j06";
-      };
       snabbBenchmark = num:
         let
           name' = "${name}_num=${toString num}";
@@ -35,11 +30,7 @@ in rec {
           ${name'} = pkgs.lib.hydraJob (testing.mkSnabbTest ({
             name = name';
             alwaysSucceed = true;
-            patchPhase = ''
-              patch -p1 < ${testEnvPatch} || true
-            '';
             preInstall = ''
-              cp qemu*.log $out/ || true
               cp snabb*.log $out/ || true
             '';
             SNABB_SHM_KEEP=keepShm;
@@ -59,12 +50,10 @@ in rec {
             '';
             meta = {
               snabbVersion = attrs.snabb.version or "";
-              qemuVersion = attrs.qemu.version or "";
-              kernelVersion = attrs.kPackages.kernel.version or "";
               repeatNum = num;
               inherit sudo toCSV;
             } // (attrs.meta or {});
-          } // removeAttrs attrs [ "times" "toCSV" "kPackages" "meta" "name"]));
+          } // removeAttrs attrs [ "times" "toCSV" "meta" "name"]));
         };
     in testing.mergeAttrsMap snabbBenchmark (pkgs.lib.range 1 times);
 
@@ -78,7 +67,8 @@ in rec {
       name = "basic1_snabb=${testing.versionToAttribute snabb.version or ""}_packets=100e6";
       inherit snabb times hardware keepShm sudo;
       checkPhase = ''
-        ${sudo} -E ${snabb}/bin/snabb snabbmark basic1 100e6 |& tee $out/log.txt
+        [ -z "$SNABB_CPUS" ] && (echo "SNABB_CPUS not set"; exit 1)
+        ${sudo} -E taskset -c $(cut -d '-' -f 1 <<<$SNABB_CPUS) ${snabb}/bin/snabb snabbmark basic1 100e6 |& tee $out/log.txt
       '';
       toCSV = drv: ''
         score=$(awk '/Mpps/ {print $(NF-1)}' < ${drv}/log.txt)
@@ -126,59 +116,6 @@ in rec {
           --src 11:11:11:11:11:11 --dst 22:22:22:22:22:22 --sizes 64 \
           --duration 1 "$SNABB_PCI_INTEL0" |& tee $out/log.txt
       '';
-    };
-
-
-  /* Execute `iperf` benchmark.
-
-     Requires `testNixEnv` built fixtures providing qemu images.
-
-     If hardware group doesn't use have a NIC, ports can be specified.
-  */
-  mkMatrixBenchNFVIperf = { snabb, times, qemu, kPackages, conf ? "NA", hardware ? "lugano", testNixEnv, keepShm, sudo, ... }:
-    let
-      iperfports = {
-        base         = "program/snabbnfv/test_fixtures/nfvconfig/test_functions/same_vlan.ports";
-        filter       = "program/snabbnfv/test_fixtures/nfvconfig/test_functions/filter.ports";
-        ipsec        = "program/snabbnfv/test_fixtures/nfvconfig/test_functions/crypto.ports";
-        l2tpv3       = "program/snabbnfv/test_fixtures/nfvconfig/test_functions/tunnel.ports";
-        l2tpv3_ipsec = "program/snabbnfv/test_fixtures/nfvconfig/test_functions/crypto-tunnel.ports";
-      };
-    in mkSnabbBenchTest {
-      name = "iperf_conf=${conf}_snabb=${testing.versionToAttribute snabb.version or ""}_kernel=${testing.versionToAttribute kPackages.kernel.version}_qemu=${testing.versionToAttribute qemu.version}";
-      inherit hardware kPackages snabb times qemu testNixEnv keepShm sudo;
-      toCSV = drv: ''
-        score=$(awk '/^IPERF-/ { print $2 }' < ${drv}/log.txt)
-        ${writeCSV drv "iperf" "Gbps"}
-      '';
-      meta = { inherit conf; };
-      needsNixTestEnv = true;
-      SNABB_IPERF_BENCH_CONF = iperfports.${conf} or "";
-      checkPhase = ''
-        cd src
-        ${sudo} -E program/snabbnfv/selftest.sh bench |& tee $out/log.txt
-      '';
-    };
-
-  /* Execute `vita-loopback` benchmark.
-
-     `vita-loopback` has no dependencies except Snabb. Packet size can be
-     specified via pktsize.
-  */
-  mkMatrixBenchVitaLoopback = { snabb, times, pktsize ? "IMIX", hardware ? "murren", keepShm, sudo, ... }:
-    mkSnabbBenchTest {
-      name = "vita-loopback_pktsize=${pktsize}_packets=100e6_snabb=${testing.versionToAttribute snabb.version or ""}";
-      inherit snabb times hardware keepShm sudo;
-      meta = { inherit pktsize; };
-      toCSV = drv: ''
-        score=$(awk '/Gbps/ {print $(NF-1)}' < ${drv}/log.txt)
-        ${writeCSV drv "vita-loopback" "Gbps"}
-      '';
-      checkPhase = ''
-        cd src
-        ${sudo} -E ${snabb}/bin/snabb snsh program/vita/test.snabb ${pktsize} 100e6 |& tee $out/log.txt
-      '';
-
     };
 
   /* Execute `interlink-wait` benchmark.
@@ -293,12 +230,41 @@ in rec {
 
     };
 
+  /* Execute `ipfix-probe` benchmark.
+
+     `ipfix-probe` depends on SNABB_CPUS0, SNABB_CPUS1,
+     SNABB_PCI_CONNECTX_0, SNABB_PCI_CONNECTX_1.
+       - duration specifies benchmark duration
+  */
+  mkMatrixBenchIpfixProbe = { snabb, times, duration ? "20", hardware ? "murren", keepShm, sudo, ... }:
+    mkSnabbBenchTest {
+      name = "ipfix-probe_duration=${duration}_snabb=${testing.versionToAttribute snabb.version or ""}";
+      inherit snabb times hardware keepShm sudo;
+      meta = { inherit duration; };
+      toCSV = drv: ''
+        score=$(awk '/Mpps/ {print $(NF-1)}' < ${drv}/log.txt)
+        ${writeCSV drv "ipfix-probe" "Mpps"}
+      '';
+      checkPhase = ''
+        cd src
+        [ -z "$SNABB_CPUS0" ] && (echo "SNABB_CPUS0 not set"; exit 1)
+        [ -z "$SNABB_CPUS1" ] && (echo "SNABB_CPUS1 not set"; exit 1)
+        [ -z "$SNABB_PCI_CONNECTX_0" ] && (echo "SNABB_PCI_CONNECTX_0 not set"; exit 1)
+        [ -z "$SNABB_PCI_CONNECTX_1" ] && (echo "SNABB_PCI_CONNECTX_1 not set"; exit 1)
+        ${sudo} -E ${snabb}/bin/snabb snsh program/ipfix/tests/bench.snabb \
+          --duration ${duration} --new-flows-freq 450 \
+          --cpu "$SNABB_CPUS0" --loadgen-cpu "$SNABB_CPUS1" \
+          "$SNABB_PCI_CONNECTX_0" "$SNABB_PCI_CONNECTX_1" |& tee $out/log.txt
+      '';
+
+    };
+
   /* Given a benchmark derivation, benchmark name and a unit,
      write a line of the CSV file using all provided benchmark information.
   */
   writeCSV = drv: benchName: unit: ''
     if test -z "$score"; then score="NA"; fi
-    echo ${drv},${benchName},${drv.meta.pktsize or "NA"},${drv.meta.conf or "NA"},${drv.meta.snabbVersion or "NA"},${drv.meta.kernelVersion or "NA"},${drv.meta.qemuVersion or "NA"},${toString drv.meta.repeatNum},$score,${unit} >> $out/bench.csv
+    echo ${drv},${benchName},${drv.meta.pktsize or "NA"},${drv.meta.conf or "NA"},${drv.meta.snabbVersion or "NA"},${toString drv.meta.repeatNum},$score,${unit} >> $out/bench.csv
   '';
 
   # Generate CSV out of collection of benchmarking logs
@@ -313,7 +279,7 @@ in rec {
         source $stdenv/setup
         mkdir -p $out/nix-support
 
-        echo "drv,benchmark,pktsize,config,snabb,kernel,qemu,id,score,unit" > $out/bench.csv
+        echo "drv,benchmark,pktsize,config,snabb,id,score,unit" > $out/bench.csv
         ${pkgs.lib.concatMapStringsSep "\n" (drv: drv.meta.toCSV drv) benchmarkList}
 
         # Make CSV file available via Hydra
@@ -362,16 +328,6 @@ in rec {
     matchesVersionPrefix = version: drv:
       pkgs.lib.hasPrefix version (pkgs.lib.getVersion drv);
 
-    # Select software collections based on version strings
-    selectQemus = versions:
-      if versions == []
-      then software.qemus
-      else pkgs.lib.concatMap (version: pkgs.lib.filter (matchesVersionPrefix version) software.qemus) versions;
-    selectKernelPackages = versions:
-      if versions == []
-      then software.kernelPackages
-      else pkgs.lib.concatMap (version: pkgs.lib.filter (kPackages: pkgs.lib.hasPrefix version (pkgs.lib.getVersion kPackages.kernel)) software.kernelPackages) versions;
-
     # Given a list of names and benchmark inputs/parameters, get benchmarks by their alias and pass them the parameters
     selectBenchmarks = names: params:
       testing.mergeAttrsMap (name: (pkgs.lib.getAttr name benchmarks) params) names;
@@ -383,19 +339,6 @@ in rec {
       packetblaster = mkMatrixBenchPacketblaster;
       packetblaster-synth = mkMatrixBenchPacketblasterSynth;
 
-      iperf = mkMatrixBenchNFVIperf;
-      iperf-base = params: mkMatrixBenchNFVIperf (params // {conf = "base"; hardware = "murren";});
-      iperf-filter = params: mkMatrixBenchNFVIperf (params // {conf = "filter"; hardware = "murren";});
-      iperf-ipsec = params: mkMatrixBenchNFVIperf (params // {conf = "ipsec"; hardware = "murren";});
-      iperf-l2tpv3 = params: mkMatrixBenchNFVIperf (params // {conf = "l2tpv3"; hardware = "murren";});
-      iperf-l2tpv3-ipsec = params: mkMatrixBenchNFVIperf (params // {conf = "l2tpv3_ipsec"; hardware = "murren";});
-
-      vita-loopback = mkMatrixBenchVitaLoopback;
-      vita-loopback-imix = params: mkMatrixBenchVitaLoopback (params // {pktsize = "IMIX"; hardware = "murren";});
-      vita-loopback-60 = params: mkMatrixBenchVitaLoopback (params // {pktsize = "60"; hardware = "murren";});
-      vita-loopback-600 = params: mkMatrixBenchVitaLoopback (params // {pktsize = "600"; hardware = "murren";});
-      vita-loopback-1000 = params: mkMatrixBenchVitaLoopback (params // {pktsize = "1000"; hardware = "murren";});
-
       interlink-single = params: mkMatrixBenchInterlinkWait (params // {nreceivers = "1";});
       interlink-multi = params: mkMatrixBenchInterlinkWait (params // {nreceivers = "3";});
 
@@ -406,5 +349,7 @@ in rec {
       mellanox-source-64 = params: mkMatrixBenchMellanoxSource (params // {pktsize = "64";});
 
       lwaftr-soft = mkMatrixBenchLwaftrSoft;
+
+      ipfix-probe = mkMatrixBenchIpfixProbe;
     };
 }

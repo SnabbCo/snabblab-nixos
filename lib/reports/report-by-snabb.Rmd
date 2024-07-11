@@ -7,14 +7,7 @@ output:
     toc_float: true
 ---
 
-# Report on basic, iperf, and l2fwd
-
-This report makes a basic comparison of how several Snabb versions perform. The benchmarks used are "end to end" functional tests. Only one set of software versions are considered for the dependencies used in test cases (QEMU, Linux kernel).
-
-Benchmarks:
-
-* `basic` is a simple synthetic benchmark (also known as `snabbmark basic1`). This exercises basic app network processing such as allocating and freeing packets, transfers between ring buffers, and executing the apps.
-* `iperf` measures the throughput in gigabits per second when connecting two VMs via one Snabb process. The VMs run an iperf client and server respectively. The Snabb process forwards each packet from one VM to the other and performs checksum offloading.
+This report makes a basic comparison of how several Snabb versions perform.
 
 ## Setup
 
@@ -26,8 +19,6 @@ knitr::opts_chunk$set(echo = TRUE, error = TRUE, fig.width = 10, fig.height = 6)
 library(ggplot2)
 dat <- read.csv("bench.csv")
 d <- as.data.frame(dat)
-# "sliced" is the dataset with unwanted configurations and software versions excluded
-#sliced <- subset(d, subset=(benchmark == "basic" | (kernel == "3.18.29" & qemu == "2.4.1")))
 sliced <- d
 ```
 
@@ -41,7 +32,7 @@ p <- p + theme(legend.position="top")
 p <- p + geom_point()
 p <- p + geom_line()
 p <- p + expand_limits(y=0)
-p <- p + facet_grid(config ~ benchmark, scales = "free")
+p <- p + facet_wrap(config ~ pktsize ~ benchmark, scales = "free")
 p + ggtitle("Sequential test results")
 ```
 
@@ -52,7 +43,7 @@ p + ggtitle("Sequential test results")
 p <- ggplot(sliced, aes(x=id, y=score, color=snabb))
 p <- p + theme(legend.position="top")
 p <- p + geom_boxplot(alpha=0.50)
-p <- p + facet_grid(config ~ benchmark, scales = "free")
+p <- p + facet_wrap(config ~ pktsize ~ benchmark, scales = "free")
 p + ggtitle("Summary of test results")
 ```
 
@@ -64,7 +55,7 @@ p + ggtitle("Summary of test results")
 p <- ggplot(sliced, aes(score, fill = snabb, color = snabb))
 p <- p + theme(legend.position="top")
 p <- p + geom_density(alpha = 0.1)
-p <- p + facet_grid(config ~ benchmark, scales = "free")
+p <- p + facet_wrap(config ~ pktsize ~ benchmark, scales = "free")
 p + ggtitle("Shape (distribution) of test results")
 ```
 
